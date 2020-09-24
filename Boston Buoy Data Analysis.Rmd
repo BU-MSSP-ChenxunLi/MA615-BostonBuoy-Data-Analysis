@@ -1,0 +1,177 @@
+---
+title: "Boston Buoy Data Analysis"
+author: "Chenxun Li"
+date: "9/21/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(tidyr)
+library(forecast)
+library(tseries)
+library(lubridate)
+knitr::opts_chunk$set(echo = TRUE)
+```
+## 1.Introduction
+The project provides evidence of golbal warning in the data collected by a single weather buoy in the NOAA National Data Buoy Center. In this project, assembling data, transforming data and sampling frequency, time series, etc are included.
+
+## 2.Meterials and Methods
+The whole work is organized as a RStudio(R version 4.0.2) project.And the code is shown below.
+
+### (1)Reading data
+In this step, I read the data in the folder with loop function.
+At first, download the data(.txt) from the NOAA National Data center and save them in the folder.
+```{r}
+##Set the certain file as Working Directory
+setwd("~/Desktop/615/assignment")
+##Enter “a” for all files in the Input folder
+a <- list.files("data")
+##Build path variable "dir"
+dir <- paste("./data/",a,sep="")
+##Read the length of "dir", which is the number of files in the folder.
+n <- length(dir)
+##Read the contents of the first file
+##We don't have to read one first, but to keep things simple and save time defining "data.frame",
+##I chose to read a file first. 
+merge.data <- read.table(file=dir[1],header=TRUE,fill=TRUE)
+
+##The loop starts with the second file and reads in all the files and combines them into 
+##the "merge.data" variable
+for(i in 2:n){
+  new.data <- read.table(file=dir[i],header=TRUE,fill=TRUE)
+  merge.data <- merge(merge.data,new.data,all=T,sort = T)
+}
+
+##Now,we can see 168800 obs. of 20 variables.
+str(merge.data)
+
+```
+
+### (2)Data processing
+In this step, I use several functions to make the data in smaller quantity and easy for analyzing.
+We can find some problems in the data read just now, such as repetitive variables which include "WDIR"and "WD", "BAR" and"PRES". Then, we solve them and make data into appropriate form.
+
+```{r}
+##Process missing values
+merge.data[is.na(merge.data)] <- 0
+##Merge repetitive values and delete repetitive variables
+merge.data$PRES <- merge.data$PRES+merge.data$BAR
+merge.data$WDIR <- merge.data$WDIR+merge.data$WD
+merge.data <- merge.data[,-18]
+merge.data <- merge.data[,-17]
+merge.data <- merge.data[,-16]
+dt <- merge.data
+
+##Use zeros to pad out the values of "MM', "DD", "hh"
+dt$MM <- formatC(dt$MM,flag = '0',width = 2)
+dt$DD <- formatC(dt$DD,flag = '0',width = 2)
+dt$hh <- as.numeric(formatC(dt$hh,flag = '0',width = 2))
+##unite the time
+dt_1 <- dt%>%unite('time','YY','MM','DD',sep='-')
+dt_1$time <- as.Date(dt_1$time)
+##remove outlier
+dt_1 <- filter(dt_1,ATMP<40&WTMP<40)
+##select the max/mean WTMP(sea surface temperature) of each day
+dtWTMP_max <- tapply(dt_1$WTMP,dt_1$time,max)
+dtWTMP_mean <- tapply(dt_1$WTMP,dt_1$time,mean)
+##select the max/mean ATMP(air temperature) of each day
+dtATMP_max <- tapply(dt_1$ATMP,dt_1$time,max)
+dtATMP_mean <- tapply(dt_1$ATMP,dt_1$time,mean)
+
+##Now, let's take look at an example:we can see the mean temperature of each day.
+head(dtATMP_mean, 30)
+```
+
+### (3)Data analysis
+In this step, I use time series to remove the seasonal effect.
+
+[1]max and mean of WTMP(sea surface temperature)
+
+At first, I research in the sea surface temperature.
+```{r}
+##Change "dtWTMP_max" into a vector form
+dtWTMP_max <- as.vector(dtWTMP_max)
+##Read in the time series
+WTMP_max <-  ts(dtWTMP_max,frequency=365,start = c(2000,1))
+##Draw a time series diagram
+plot(WTMP_max)
+abline(lm(WTMP_max~time(WTMP_max)))
+title(main="WTMP_max~Time")
+##Estimate the trending, seasonal, and irregular parts of the time series.
+WTMP_max_components <- decompose(WTMP_max)
+plot(WTMP_max_components,ann=F)
+title(main ="WTMP_max-Decomposition of additive time series")
+
+##The analysis of "dtWTMP_mean" is same as the "dtWTMP_max"
+##Change "dtWTMP_max" into a vector form
+dtWTMP_mean <- as.vector(dtWTMP_mean)
+##Read in the time series
+WTMP_mean <-  ts(dtWTMP_mean,frequency=365,start = c(2000,1))
+##Draw a time series diagram
+plot(WTMP_mean)
+abline(lm(WTMP_mean~time(WTMP_mean)))
+title(main="WTMP_mean~Time")
+##Estimate the trending, seasonal, and irregular parts of the time series.
+WTMP_mean_components <- decompose(WTMP_mean)
+plot(WTMP_mean_components,ann=F) 
+title(main ="WTMP_mean-Decomposition of additive time series")
+
+```
+
+[2]max and mean of ATMP(air temperature)
+
+Then, I research in the air temperature.
+```{r}
+##Change "dtATMP_max" into a vector form
+dtATMP_max <- as.vector(dtATMP_max)
+##Read in the time series
+ATMP_max <-  ts(dtATMP_max,frequency=365,start = c(2000,1))
+##Draw a time series diagram
+plot(ATMP_max)
+abline(lm(ATMP_max~time(ATMP_max)))
+title(main="ATMP_max~Time")
+##Estimate the trending, seasonal, and irregular parts of the time series.
+ATMP_max_components <- decompose(ATMP_max)
+plot(ATMP_max_components,ann=F)
+title(main ="ATMP_max-Decomposition of additive time series")
+
+##The analysis of "dtATMP_mean" is same as the "dtATMP_max"
+##Change "dtATMP_max" into a vector form
+dtATMP_mean <- as.vector(dtATMP_mean)
+##Read in the time series
+ATMP_mean <-  ts(dtATMP_mean,frequency=365,start = c(2000,1))
+##Draw a time series diagram
+plot(ATMP_mean)
+abline(lm(ATMP_mean~time(ATMP_mean)))
+title(main="ATMP_mean~Time")
+##Estimate the trending, seasonal, and irregular parts of the time series.
+ATMP_mean_components <- decompose(ATMP_mean)
+plot(ATMP_mean_components,ann=F) 
+title(main ="ATMP_mean-Decomposition of additive time series")
+
+```
+
+## 3.Result and Discussion
+
+### (1)Result analysis
+At first , from the four time series diagrams, we can find that the line' slope is above zero, which means that the max and the mean of the sea surface temperature increases with time passing. So as the air temperature.
+Then, from the four "decomposition of additive time series" diagrams, I seperate the seasonal effect from the data and we can also find max and the mean of the sea surface temperature increases with time passing with smaller seasonal influence. And so as the air temperature.
+
+### (2)Considerations and limitations
+[1]There is a peak in every "decomposition of additive time series" diagram, and I think probably one year is warmer than others.
+
+[2]The function "tapply()" produce a multidimensional array, in this research, I change it to a vector, but I wonder how to change it into a matrix.
+
+[3]I read the data from the folder this time, and next time I should try to read the data from the url.
+
+## 4.Conlusion
+From the research above, it is indeed that global is warmer from the data collected by a single weather buoy in the NOAA National Data Buoy Center.
+
+## 5.Reference
+(1)R packages:tidyverse, tidyr, forecast, tseries, lubridate.
+
+(2)Hadley Wickham & Garrett Grolemund(2017). R for data science
+
